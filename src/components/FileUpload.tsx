@@ -17,6 +17,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   setIsLoading
 }) => {
   const processFile = useCallback((file: File) => {
+    console.log('Processing file:', file.name, 'Type:', file.type, 'Size:', file.size);
     setIsLoading(true);
     
     const reader = new FileReader();
@@ -26,37 +27,79 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         let workbook;
         
         if (file.name.endsWith('.csv')) {
+          console.log('Processing CSV file');
           // For CSV files
-          workbook = XLSX.read(data, { type: 'binary' });
+          workbook = XLSX.read(data, { type: 'string' });
         } else {
+          console.log('Processing Excel file');
           // For Excel files
           workbook = XLSX.read(data, { type: 'array' });
         }
         
         const sheetName = workbook.SheetNames[0];
+        console.log('Sheet name:', sheetName);
+        
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+        
+        console.log('Raw JSON data:', jsonData.slice(0, 5));
         
         if (jsonData.length > 0) {
-          const headers = jsonData[0] as string[];
-          const rows = jsonData.slice(1);
+          // Filter out empty rows
+          const filteredData = jsonData.filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined));
           
-          // Convert array data to objects
-          const processedData = rows.map(row => {
-            const obj: any = {};
-            headers.forEach((header, index) => {
-              obj[header] = row[index] || '';
+          if (filteredData.length > 0) {
+            const headers = filteredData[0].map(header => String(header || '').trim()).filter(h => h !== '');
+            const rows = filteredData.slice(1);
+            
+            console.log('Processed headers:', headers);
+            console.log('Sample rows:', rows.slice(0, 3));
+            
+            // Convert array data to objects
+            const processedData = rows.map((row, index) => {
+              const obj: any = {};
+              headers.forEach((header, colIndex) => {
+                const value = row[colIndex];
+                // Handle different data types
+                if (value === null || value === undefined) {
+                  obj[header] = '';
+                } else if (typeof value === 'number') {
+                  obj[header] = value;
+                } else {
+                  obj[header] = String(value).trim();
+                }
+              });
+              return obj;
+            }).filter(row => {
+              // Filter out completely empty rows
+              return Object.values(row).some(val => val !== '' && val !== null && val !== undefined);
             });
-            return obj;
-          });
-          
-          onFileProcessed(processedData, headers);
+            
+            console.log('Final processed data:', processedData.slice(0, 3));
+            console.log('Data count:', processedData.length);
+            
+            if (processedData.length > 0 && headers.length > 0) {
+              onFileProcessed(processedData, headers);
+            } else {
+              throw new Error('No se encontraron datos válidos en el archivo');
+            }
+          } else {
+            throw new Error('El archivo parece estar vacío o no contener datos válidos');
+          }
+        } else {
+          throw new Error('No se pudieron leer los datos del archivo');
         }
       } catch (error) {
         console.error('Error processing file:', error);
+        // You might want to add a toast notification here
       } finally {
         setIsLoading(false);
       }
+    };
+    
+    reader.onerror = (error) => {
+      console.error('FileReader error:', error);
+      setIsLoading(false);
     };
     
     if (file.name.endsWith('.csv')) {

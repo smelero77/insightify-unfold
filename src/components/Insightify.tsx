@@ -35,6 +35,12 @@ export const Insightify: React.FC = () => {
   const { toast } = useToast();
 
   const handleFileProcessed = (processedData: any[], fileHeaders: string[]) => {
+    console.log('File processed:', { 
+      rowCount: processedData.length, 
+      headers: fileHeaders,
+      sampleData: processedData.slice(0, 3)
+    });
+    
     setData(processedData);
     setHeaders(fileHeaders);
     setInsights(null);
@@ -120,6 +126,13 @@ export const Insightify: React.FC = () => {
   };
 
   const handleKPISelect = (kpi: KPI, index: number) => {
+    console.log('KPI selected:', kpi, 'Index:', index);
+    console.log('Current data for visualization:', {
+      dataCount: data.length,
+      headers: headers,
+      sampleData: data.slice(0, 2)
+    });
+    
     setSelectedKPIIndex(index);
     toast({
       title: "KPI seleccionado",
