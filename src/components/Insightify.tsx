@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Brain, Sparkles, AlertCircle, Settings } from 'lucide-react';
+import { Brain, Sparkles, AlertCircle, Settings, Code, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import heroImage from '@/assets/hero-data-analytics.jpg';
 
@@ -44,6 +44,12 @@ export default function Insightify() {
   const [apiKey, setApiKey] = useState(''); // Dejar vacío por defecto
   const [showApiKeyInput, setShowApiKeyInput] = useState(true); // Mostrar por defecto
   
+  // Estados para la visualización del API response
+  const [apiResponse, setApiResponse] = useState<any>(null);
+  const [showApiResponse, setShowApiResponse] = useState(false);
+  const [apiError, setApiError] = useState<any>(null);
+  const [sentPrompt, setSentPrompt] = useState<string>('');
+  
   const { toast } = useToast();
 
   const handleFileProcessed = (processedData: any[], fileHeaders: string[]) => {
@@ -76,11 +82,13 @@ export default function Insightify() {
     }
 
     setIsAnalyzing(true);
+    // Limpiar estados anteriores
+    setApiResponse(null);
+    setApiError(null);
+    setSentPrompt('');
     
     try {
       // --- PROMPT MEJORADO ---
-      // Este es el nuevo prompt que le pide a la IA que devuelva la configuración del gráfico.
-      // Es más explícito y le da a nuestro código las instrucciones que necesita.
       const prompt = `
         Eres un desarrollador y analista de negocio experto. Has recibido un fichero con las siguientes columnas: ${headers.join(', ')}.
 
@@ -122,8 +130,11 @@ export default function Insightify() {
         }
       `;
 
+      // Guardar el prompt que enviamos
+      setSentPrompt(prompt);
+
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
         method: 'POST',
@@ -136,7 +147,6 @@ export default function Insightify() {
               text: prompt
             }]
           }],
-          // Añadimos una configuración para forzar la respuesta en JSON
           generationConfig: {
             responseMimeType: "application/json", 
             temperature: 0.7,
@@ -150,11 +160,22 @@ export default function Insightify() {
 
       clearTimeout(timeoutId);
 
+      // Capturar la respuesta completa del API
+      const result = await response.json();
+      
       if (!response.ok) {
+        // Guardar el error completo
+        setApiError({
+          status: response.status,
+          statusText: response.statusText,
+          response: result
+        });
         throw new Error(`Error: ${response.status} ${response.statusText}`);
       }
 
-      const result = await response.json();
+      // Guardar la respuesta completa exitosa
+      setApiResponse(result);
+      
       const generatedText = result.candidates[0]?.content?.parts[0]?.text;
       
       if (!generatedText) {
@@ -311,6 +332,66 @@ export default function Insightify() {
               onKPISelect={handleKPISelect}
               selectedKPIIndex={selectedKPIIndex}
             />
+          )}
+
+          {/* API Response Debug */}
+          {(apiResponse || apiError) && (
+            <Card className="p-6 animate-slide-up">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Code className="h-5 w-5 text-primary" />
+                    <h3 className="text-lg font-semibold">Respuesta del API</h3>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowApiResponse(!showApiResponse)}
+                  >
+                    {showApiResponse ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    {showApiResponse ? 'Ocultar' : 'Mostrar'}
+                  </Button>
+                </div>
+                
+                {showApiResponse && (
+                  <div className="space-y-4">
+                    {/* Prompt Enviado */}
+                    {sentPrompt && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground">Prompt Enviado:</h4>
+                        <div className="bg-muted p-3 rounded-lg overflow-auto max-h-40">
+                          <pre className="text-sm whitespace-pre-wrap">{sentPrompt}</pre>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Respuesta del API */}
+                    {apiResponse && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground">Respuesta Exitosa:</h4>
+                        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg overflow-auto max-h-96">
+                          <pre className="text-sm whitespace-pre-wrap">
+                            {JSON.stringify(apiResponse, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Error del API */}
+                    {apiError && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground">Error del API:</h4>
+                        <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg overflow-auto max-h-96">
+                          <pre className="text-sm whitespace-pre-wrap">
+                            {JSON.stringify(apiError, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
           )}
 
           {/* Chart Visualization */}
