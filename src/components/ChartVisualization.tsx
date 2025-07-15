@@ -52,7 +52,7 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         const num = Number(val);
         return !isNaN(num) && isFinite(num);
       });
-      return numericValues.length > values.length * 0.5; // At least 50% numeric
+      return numericValues.length > values.length * 0.3; // At least 30% numeric
     });
 
     // Find categorical columns - improved detection
@@ -60,20 +60,82 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       const values = data.slice(0, 100).map(row => row[header]);
       const nonEmptyValues = values.filter(val => val !== null && val !== undefined && val !== '');
       const uniqueValues = [...new Set(nonEmptyValues)];
-      return uniqueValues.length > 1 && uniqueValues.length <= 15 && uniqueValues.length < nonEmptyValues.length * 0.8;
+      return uniqueValues.length > 1 && uniqueValues.length <= 20 && uniqueValues.length < nonEmptyValues.length;
     });
 
     console.log('Numeric columns:', numericColumns);
     console.log('Categorical columns:', categoricalColumns);
 
-    // Case 1: We have both numeric and categorical columns
-    if (numericColumns.length > 0 && categoricalColumns.length > 0) {
+    // Generate different chart types based on KPI title
+    const kpiTitle = selectedKPI.titulo.toLowerCase();
+    
+    // Case 1: Multiple numeric columns - create comparison chart
+    if (numericColumns.length >= 2) {
+      console.log('Creating multi-column comparison chart');
+      
+      // Take first 10 rows for comparison
+      const comparisonData = data.slice(0, 10);
+      const firstTwoNumericColumns = numericColumns.slice(0, 2);
+      
+      return {
+        labels: comparisonData.map((_, index) => `Registro ${index + 1}`),
+        datasets: firstTwoNumericColumns.map((column, index) => ({
+          label: column,
+          data: comparisonData.map(row => Number(row[column]) || 0),
+          backgroundColor: index === 0 ? 'rgba(37, 99, 235, 0.8)' : 'rgba(59, 130, 246, 0.8)',
+          borderColor: index === 0 ? 'rgba(37, 99, 235, 1)' : 'rgba(59, 130, 246, 1)',
+          borderWidth: 2,
+        }))
+      };
+    }
+    
+    // Case 2: Category + Multiple numeric columns
+    if (categoricalColumns.length > 0 && numericColumns.length >= 2) {
+      console.log('Creating category with multiple metrics chart');
+      
+      const categoryColumn = categoricalColumns[0];
+      const firstTwoNumericColumns = numericColumns.slice(0, 2);
+      
+      // Group by category
+      const categoryGroups: { [key: string]: any } = {};
+      data.forEach(row => {
+        const category = String(row[categoryColumn] || 'Sin categoría');
+        if (!categoryGroups[category]) {
+          categoryGroups[category] = [];
+        }
+        categoryGroups[category].push(row);
+      });
+      
+      // Get top 8 categories
+      const topCategories = Object.keys(categoryGroups)
+        .sort((a, b) => categoryGroups[b].length - categoryGroups[a].length)
+        .slice(0, 8);
+      
+      return {
+        labels: topCategories,
+        datasets: firstTwoNumericColumns.map((column, index) => ({
+          label: column,
+          data: topCategories.map(category => {
+            const categoryData = categoryGroups[category];
+            const sum = categoryData.reduce((acc: number, row: any) => {
+              return acc + (Number(row[column]) || 0);
+            }, 0);
+            return Math.round(sum / categoryData.length); // Average
+          }),
+          backgroundColor: index === 0 ? 'rgba(37, 99, 235, 0.8)' : 'rgba(59, 130, 246, 0.8)',
+          borderColor: index === 0 ? 'rgba(37, 99, 235, 1)' : 'rgba(59, 130, 246, 1)',
+          borderWidth: 2,
+        }))
+      };
+    }
+    
+    // Case 3: Category + Single numeric column (original logic)
+    if (categoricalColumns.length > 0 && numericColumns.length > 0) {
+      console.log('Creating category with single metric chart');
+      
       const categoryColumn = categoricalColumns[0];
       const valueColumn = numericColumns[0];
       
-      console.log('Using category column:', categoryColumn);
-      console.log('Using value column:', valueColumn);
-
       // Group data by category and sum values
       const groupedData: { [key: string]: number } = {};
       
@@ -93,8 +155,6 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         .sort(([,a], [,b]) => b - a)
         .slice(0, 10);
 
-      console.log('Grouped data:', sortedEntries);
-
       return {
         labels: sortedEntries.map(([category]) => category),
         datasets: [{
@@ -107,25 +167,55 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       };
     }
 
-    // Case 2: Only numeric columns - create a simple distribution
+    // Case 4: Only numeric columns - create distribution or comparison
     if (numericColumns.length > 0) {
-      const valueColumn = numericColumns[0];
-      const values = data.slice(0, 20).map(row => Number(row[valueColumn]) || 0);
+      console.log('Creating numeric distribution chart');
       
-      return {
-        labels: values.map((_, index) => `Registro ${index + 1}`),
-        datasets: [{
-          label: `${selectedKPI.titulo} (${valueColumn})`,
-          data: values,
-          backgroundColor: 'rgba(37, 99, 235, 0.8)',
-          borderColor: 'rgba(37, 99, 235, 1)',
-          borderWidth: 2,
-        }]
-      };
+      if (numericColumns.length === 1) {
+        // Single numeric column - show distribution
+        const valueColumn = numericColumns[0];
+        const values = data.slice(0, 15).map(row => Number(row[valueColumn]) || 0);
+        
+        return {
+          labels: values.map((_, index) => `Registro ${index + 1}`),
+          datasets: [{
+            label: `${selectedKPI.titulo} (${valueColumn})`,
+            data: values,
+            backgroundColor: 'rgba(37, 99, 235, 0.8)',
+            borderColor: 'rgba(37, 99, 235, 1)',
+            borderWidth: 2,
+          }]
+        };
+      } else {
+        // Multiple numeric columns - show comparison
+        const selectedColumns = numericColumns.slice(0, 3); // Max 3 columns
+        const sampleData = data.slice(0, 8);
+        
+        return {
+          labels: sampleData.map((_, index) => `Registro ${index + 1}`),
+          datasets: selectedColumns.map((column, index) => ({
+            label: column,
+            data: sampleData.map(row => Number(row[column]) || 0),
+            backgroundColor: [
+              'rgba(37, 99, 235, 0.8)',
+              'rgba(59, 130, 246, 0.8)',
+              'rgba(96, 165, 250, 0.8)'
+            ][index],
+            borderColor: [
+              'rgba(37, 99, 235, 1)',
+              'rgba(59, 130, 246, 1)',
+              'rgba(96, 165, 250, 1)'
+            ][index],
+            borderWidth: 2,
+          }))
+        };
+      }
     }
 
-    // Case 3: Only categorical columns - create a count chart
+    // Case 5: Only categorical columns - create count chart
     if (categoricalColumns.length > 0) {
+      console.log('Creating categorical count chart');
+      
       const categoryColumn = categoricalColumns[0];
       const counts: { [key: string]: number } = {};
       
@@ -150,22 +240,29 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       };
     }
 
-    // Case 4: Fallback - create a simple demonstration chart
-    console.log('Using fallback chart data');
-    const fallbackData = Array.from({ length: 10 }, (_, i) => ({
-      label: `Elemento ${i + 1}`,
-      value: Math.floor(Math.random() * 100) + 10
-    }));
-
+    // Case 6: Fallback - create a demonstration chart with multiple series
+    console.log('Using fallback chart with multiple series');
+    
+    const categories = ['Categoría A', 'Categoría B', 'Categoría C', 'Categoría D', 'Categoría E'];
+    
     return {
-      labels: fallbackData.map(item => item.label),
-      datasets: [{
-        label: selectedKPI.titulo,
-        data: fallbackData.map(item => item.value),
-        backgroundColor: 'rgba(37, 99, 235, 0.8)',
-        borderColor: 'rgba(37, 99, 235, 1)',
-        borderWidth: 2,
-      }]
+      labels: categories,
+      datasets: [
+        {
+          label: 'Serie 1',
+          data: categories.map(() => Math.floor(Math.random() * 100) + 20),
+          backgroundColor: 'rgba(37, 99, 235, 0.8)',
+          borderColor: 'rgba(37, 99, 235, 1)',
+          borderWidth: 2,
+        },
+        {
+          label: 'Serie 2',
+          data: categories.map(() => Math.floor(Math.random() * 80) + 10),
+          backgroundColor: 'rgba(59, 130, 246, 0.8)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 2,
+        }
+      ]
     };
   };
 
