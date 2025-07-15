@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { BarChart3, Database, Eye, EyeOff } from 'lucide-react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -37,12 +39,24 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
   selectedKPI
 }) => {
   const chartRef = useRef<ChartJS<'bar'>>(null);
+  const [showDataDetails, setShowDataDetails] = useState(false);
+  const [chartInfo, setChartInfo] = useState<{
+    type: string;
+    columnsUsed: string[];
+    processedData: any[];
+    rawSample: any[];
+  } | null>(null);
 
   // Generate chart data based on the selected KPI and available data
   const generateChartData = () => {
     console.log('Generating chart data for KPI:', selectedKPI.titulo);
     console.log('Available data:', data.slice(0, 5));
     console.log('Headers:', headers);
+    
+    let chartType = '';
+    let columnsUsed: string[] = [];
+    let processedData: any[] = [];
+    let rawSample = data.slice(0, 10);
     
     // Find numeric columns - improved detection
     const numericColumns = headers.filter(header => {
@@ -66,16 +80,27 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
     console.log('Numeric columns:', numericColumns);
     console.log('Categorical columns:', categoricalColumns);
 
-    // Generate different chart types based on KPI title
-    const kpiTitle = selectedKPI.titulo.toLowerCase();
-    
     // Case 1: Multiple numeric columns - create comparison chart
     if (numericColumns.length >= 2) {
       console.log('Creating multi-column comparison chart');
+      chartType = 'Comparación de múltiples columnas numéricas';
+      columnsUsed = numericColumns.slice(0, 2);
       
-      // Take first 10 rows for comparison
       const comparisonData = data.slice(0, 10);
       const firstTwoNumericColumns = numericColumns.slice(0, 2);
+      
+      processedData = comparisonData.map((row, index) => ({
+        label: `Registro ${index + 1}`,
+        [firstTwoNumericColumns[0]]: Number(row[firstTwoNumericColumns[0]]) || 0,
+        [firstTwoNumericColumns[1]]: Number(row[firstTwoNumericColumns[1]]) || 0,
+      }));
+      
+      setChartInfo({
+        type: chartType,
+        columnsUsed,
+        processedData,
+        rawSample
+      });
       
       return {
         labels: comparisonData.map((_, index) => `Registro ${index + 1}`),
@@ -92,6 +117,8 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
     // Case 2: Category + Multiple numeric columns
     if (categoricalColumns.length > 0 && numericColumns.length >= 2) {
       console.log('Creating category with multiple metrics chart');
+      chartType = 'Categorías con múltiples métricas';
+      columnsUsed = [categoricalColumns[0], ...numericColumns.slice(0, 2)];
       
       const categoryColumn = categoricalColumns[0];
       const firstTwoNumericColumns = numericColumns.slice(0, 2);
@@ -111,6 +138,27 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         .sort((a, b) => categoryGroups[b].length - categoryGroups[a].length)
         .slice(0, 8);
       
+      processedData = topCategories.map(category => {
+        const categoryData = categoryGroups[category];
+        const result: any = { category };
+        
+        firstTwoNumericColumns.forEach(column => {
+          const sum = categoryData.reduce((acc: number, row: any) => {
+            return acc + (Number(row[column]) || 0);
+          }, 0);
+          result[column] = Math.round(sum / categoryData.length); // Average
+        });
+        
+        return result;
+      });
+      
+      setChartInfo({
+        type: chartType,
+        columnsUsed,
+        processedData,
+        rawSample
+      });
+      
       return {
         labels: topCategories,
         datasets: firstTwoNumericColumns.map((column, index) => ({
@@ -129,9 +177,11 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       };
     }
     
-    // Case 3: Category + Single numeric column (original logic)
+    // Case 3: Category + Single numeric column
     if (categoricalColumns.length > 0 && numericColumns.length > 0) {
       console.log('Creating category with single metric chart');
+      chartType = 'Categorías con métrica única';
+      columnsUsed = [categoricalColumns[0], numericColumns[0]];
       
       const categoryColumn = categoricalColumns[0];
       const valueColumn = numericColumns[0];
@@ -154,6 +204,18 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       const sortedEntries = Object.entries(groupedData)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 10);
+      
+      processedData = sortedEntries.map(([category, value]) => ({
+        category,
+        [valueColumn]: value
+      }));
+      
+      setChartInfo({
+        type: chartType,
+        columnsUsed,
+        processedData,
+        rawSample
+      });
 
       return {
         labels: sortedEntries.map(([category]) => category),
@@ -170,12 +232,26 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
     // Case 4: Only numeric columns - create distribution or comparison
     if (numericColumns.length > 0) {
       console.log('Creating numeric distribution chart');
+      chartType = 'Distribución numérica';
       
       if (numericColumns.length === 1) {
         // Single numeric column - show distribution
         const valueColumn = numericColumns[0];
+        columnsUsed = [valueColumn];
         const values = data.slice(0, 15).map(row => Number(row[valueColumn]) || 0);
         
+        processedData = values.map((value, index) => ({
+          label: `Registro ${index + 1}`,
+          [valueColumn]: value
+        }));
+        
+        setChartInfo({
+          type: chartType,
+          columnsUsed,
+          processedData,
+          rawSample
+        });
+
         return {
           labels: values.map((_, index) => `Registro ${index + 1}`),
           datasets: [{
@@ -189,7 +265,23 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       } else {
         // Multiple numeric columns - show comparison
         const selectedColumns = numericColumns.slice(0, 3); // Max 3 columns
+        columnsUsed = selectedColumns;
         const sampleData = data.slice(0, 8);
+        
+        processedData = sampleData.map((row, index) => {
+          const result: any = { label: `Registro ${index + 1}` };
+          selectedColumns.forEach(column => {
+            result[column] = Number(row[column]) || 0;
+          });
+          return result;
+        });
+        
+        setChartInfo({
+          type: chartType,
+          columnsUsed,
+          processedData,
+          rawSample
+        });
         
         return {
           labels: sampleData.map((_, index) => `Registro ${index + 1}`),
@@ -215,6 +307,8 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
     // Case 5: Only categorical columns - create count chart
     if (categoricalColumns.length > 0) {
       console.log('Creating categorical count chart');
+      chartType = 'Conteo por categorías';
+      columnsUsed = [categoricalColumns[0]];
       
       const categoryColumn = categoricalColumns[0];
       const counts: { [key: string]: number } = {};
@@ -227,6 +321,18 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       const sortedEntries = Object.entries(counts)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 10);
+      
+      processedData = sortedEntries.map(([category, count]) => ({
+        category,
+        count
+      }));
+      
+      setChartInfo({
+        type: chartType,
+        columnsUsed,
+        processedData,
+        rawSample
+      });
 
       return {
         labels: sortedEntries.map(([category]) => category),
@@ -242,8 +348,23 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
 
     // Case 6: Fallback - create a demonstration chart with multiple series
     console.log('Using fallback chart with multiple series');
+    chartType = 'Datos de demostración';
+    columnsUsed = ['Serie 1', 'Serie 2'];
     
     const categories = ['Categoría A', 'Categoría B', 'Categoría C', 'Categoría D', 'Categoría E'];
+    
+    processedData = categories.map(category => ({
+      category,
+      'Serie 1': Math.floor(Math.random() * 100) + 20,
+      'Serie 2': Math.floor(Math.random() * 80) + 10
+    }));
+    
+    setChartInfo({
+      type: chartType,
+      columnsUsed,
+      processedData,
+      rawSample
+    });
     
     return {
       labels: categories,
@@ -360,28 +481,98 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
   };
 
   return (
-    <Card className="p-6 animate-slide-up">
-      <div className="space-y-4">
-        <div className="flex items-center space-x-3">
-          <BarChart3 className="h-6 w-6 text-primary" />
-          <div>
-            <h3 className="text-xl font-bold">Visualización</h3>
-            <p className="text-muted-foreground">{selectedKPI.descripcion}</p>
+    <div className="space-y-6">
+      {/* Main Chart */}
+      <Card className="p-6 animate-slide-up">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <BarChart3 className="h-6 w-6 text-primary" />
+              <div>
+                <h3 className="text-xl font-bold">Visualización</h3>
+                <p className="text-muted-foreground">{selectedKPI.descripcion}</p>
+              </div>
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDataDetails(!showDataDetails)}
+              className="flex items-center space-x-2"
+            >
+              {showDataDetails ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <span>{showDataDetails ? 'Ocultar' : 'Ver'} Datos</span>
+            </Button>
+          </div>
+          
+          <div className="h-[400px] w-full bg-card/50 rounded-lg p-4">
+            <Bar 
+              ref={chartRef}
+              data={chartData} 
+              options={options}
+            />
+          </div>
+          
+          <div className="text-sm text-muted-foreground">
+            <p>💡 Tip: Esta visualización se genera automáticamente basada en el análisis de tus datos.</p>
           </div>
         </div>
-        
-        <div className="h-[400px] w-full bg-card/50 rounded-lg p-4">
-          <Bar 
-            ref={chartRef}
-            data={chartData} 
-            options={options}
-          />
-        </div>
-        
-        <div className="text-sm text-muted-foreground">
-          <p>💡 Tip: Esta visualización se genera automáticamente basada en el análisis de tus datos.</p>
-        </div>
-      </div>
-    </Card>
+      </Card>
+
+      {/* Data Details Panel */}
+      {showDataDetails && chartInfo && (
+        <Card className="p-6 animate-slide-up">
+          <div className="space-y-6">
+            <div className="flex items-center space-x-3">
+              <Database className="h-6 w-6 text-primary" />
+              <div>
+                <h3 className="text-xl font-bold">Datos de Visualización</h3>
+                <p className="text-muted-foreground">Información detallada sobre cómo se generó el gráfico</p>
+              </div>
+            </div>
+
+            {/* Chart Type */}
+            <div className="space-y-2">
+              <h4 className="font-semibold">Tipo de Gráfico:</h4>
+              <Badge variant="secondary" className="text-sm">
+                {chartInfo.type}
+              </Badge>
+            </div>
+
+            {/* Columns Used */}
+            <div className="space-y-2">
+              <h4 className="font-semibold">Columnas Utilizadas:</h4>
+              <div className="flex flex-wrap gap-2">
+                {chartInfo.columnsUsed.map((column, index) => (
+                  <Badge key={index} variant="outline" className="text-sm">
+                    {column}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* Processed Data */}
+            <div className="space-y-2">
+              <h4 className="font-semibold">Datos Procesados para el Gráfico:</h4>
+              <div className="bg-muted/50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                <pre className="text-sm font-mono whitespace-pre-wrap">
+                  {JSON.stringify(chartInfo.processedData, null, 2)}
+                </pre>
+              </div>
+            </div>
+
+            {/* Raw Sample */}
+            <div className="space-y-2">
+              <h4 className="font-semibold">Muestra de Datos Originales:</h4>
+              <div className="bg-muted/50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                <pre className="text-sm font-mono whitespace-pre-wrap">
+                  {JSON.stringify(chartInfo.rawSample, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 };
