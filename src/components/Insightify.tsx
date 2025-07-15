@@ -68,6 +68,9 @@ export const Insightify: React.FC = () => {
     try {
       const prompt = `Eres un analista de negocio experto. Has recibido un fichero con las siguientes columnas: ${headers.join(', ')}. Tu tarea es: 1. Identificar el contexto de negocio (ej: 'Datos de Ventas', 'Inventario de E-commerce', 'Resultados de Campaña de Marketing'). 2. Sugerir 4 KPIs clave que se podrían calcular con estas columnas. Para cada KPI, dame un título corto y una descripción de una línea. Formatea tu respuesta como un objeto JSON así: {"contexto": "tu análisis del contexto", "kpis": [{"titulo": "KPI 1", "descripcion": "Desc 1"}, {"titulo": "KPI 2", "descripcion": "Desc 2"}]}.`;
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
         method: 'POST',
         headers: {
@@ -86,7 +89,10 @@ export const Insightify: React.FC = () => {
             maxOutputTokens: 2048,
           },
         }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Error: ${response.status} ${response.statusText}`);
@@ -115,11 +121,28 @@ export const Insightify: React.FC = () => {
       
     } catch (error) {
       console.error('Error analyzing with Gemini:', error);
-      toast({
-        title: "Error en el análisis",
-        description: error instanceof Error ? error.message : "Ocurrió un error inesperado",
-        variant: "destructive",
-      });
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          toast({
+            title: "Tiempo de espera agotado",
+            description: "La solicitud tardó demasiado en responder. Intenta de nuevo.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error en el análisis",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Error en el análisis",
+          description: "Ocurrió un error inesperado",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsAnalyzing(false);
     }

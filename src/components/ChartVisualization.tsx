@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +33,13 @@ interface ChartVisualizationProps {
   };
 }
 
+interface ChartMetadata {
+  type: string;
+  columnsUsed: string[];
+  processedData: any[];
+  rawSample: any[];
+}
+
 export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
   data,
   headers,
@@ -40,15 +47,10 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
 }) => {
   const chartRef = useRef<ChartJS<'bar'>>(null);
   const [showDataDetails, setShowDataDetails] = useState(false);
-  const [chartInfo, setChartInfo] = useState<{
-    type: string;
-    columnsUsed: string[];
-    processedData: any[];
-    rawSample: any[];
-  } | null>(null);
+  const [chartInfo, setChartInfo] = useState<ChartMetadata | null>(null);
 
-  // Generate chart data based on the selected KPI and available data
-  const generateChartData = () => {
+  // Memoize chart data generation to prevent unnecessary recalculations
+  const { chartData, metadata } = useMemo(() => {
     console.log('Generating chart data for KPI:', selectedKPI.titulo);
     console.log('Available data:', data.slice(0, 5));
     console.log('Headers:', headers);
@@ -95,14 +97,7 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         [firstTwoNumericColumns[1]]: Number(row[firstTwoNumericColumns[1]]) || 0,
       }));
       
-      setChartInfo({
-        type: chartType,
-        columnsUsed,
-        processedData,
-        rawSample
-      });
-      
-      return {
+      const chartData = {
         labels: comparisonData.map((_, index) => `Registro ${index + 1}`),
         datasets: firstTwoNumericColumns.map((column, index) => ({
           label: column,
@@ -111,6 +106,16 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
           borderColor: index === 0 ? 'rgba(37, 99, 235, 1)' : 'rgba(59, 130, 246, 1)',
           borderWidth: 2,
         }))
+      };
+      
+      return {
+        chartData,
+        metadata: {
+          type: chartType,
+          columnsUsed,
+          processedData,
+          rawSample
+        }
       };
     }
     
@@ -152,14 +157,7 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         return result;
       });
       
-      setChartInfo({
-        type: chartType,
-        columnsUsed,
-        processedData,
-        rawSample
-      });
-      
-      return {
+      const chartData = {
         labels: topCategories,
         datasets: firstTwoNumericColumns.map((column, index) => ({
           label: column,
@@ -174,6 +172,16 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
           borderColor: index === 0 ? 'rgba(37, 99, 235, 1)' : 'rgba(59, 130, 246, 1)',
           borderWidth: 2,
         }))
+      };
+      
+      return {
+        chartData,
+        metadata: {
+          type: chartType,
+          columnsUsed,
+          processedData,
+          rawSample
+        }
       };
     }
     
@@ -209,15 +217,8 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         category,
         [valueColumn]: value
       }));
-      
-      setChartInfo({
-        type: chartType,
-        columnsUsed,
-        processedData,
-        rawSample
-      });
 
-      return {
+      const chartData = {
         labels: sortedEntries.map(([category]) => category),
         datasets: [{
           label: `${selectedKPI.titulo} (${valueColumn})`,
@@ -226,6 +227,16 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
           borderColor: 'rgba(37, 99, 235, 1)',
           borderWidth: 2,
         }]
+      };
+      
+      return {
+        chartData,
+        metadata: {
+          type: chartType,
+          columnsUsed,
+          processedData,
+          rawSample
+        }
       };
     }
 
@@ -244,15 +255,8 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
           label: `Registro ${index + 1}`,
           [valueColumn]: value
         }));
-        
-        setChartInfo({
-          type: chartType,
-          columnsUsed,
-          processedData,
-          rawSample
-        });
 
-        return {
+        const chartData = {
           labels: values.map((_, index) => `Registro ${index + 1}`),
           datasets: [{
             label: `${selectedKPI.titulo} (${valueColumn})`,
@@ -261,6 +265,16 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
             borderColor: 'rgba(37, 99, 235, 1)',
             borderWidth: 2,
           }]
+        };
+        
+        return {
+          chartData,
+          metadata: {
+            type: chartType,
+            columnsUsed,
+            processedData,
+            rawSample
+          }
         };
       } else {
         // Multiple numeric columns - show comparison
@@ -276,14 +290,7 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
           return result;
         });
         
-        setChartInfo({
-          type: chartType,
-          columnsUsed,
-          processedData,
-          rawSample
-        });
-        
-        return {
+        const chartData = {
           labels: sampleData.map((_, index) => `Registro ${index + 1}`),
           datasets: selectedColumns.map((column, index) => ({
             label: column,
@@ -300,6 +307,16 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
             ][index],
             borderWidth: 2,
           }))
+        };
+        
+        return {
+          chartData,
+          metadata: {
+            type: chartType,
+            columnsUsed,
+            processedData,
+            rawSample
+          }
         };
       }
     }
@@ -326,15 +343,8 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         category,
         count
       }));
-      
-      setChartInfo({
-        type: chartType,
-        columnsUsed,
-        processedData,
-        rawSample
-      });
 
-      return {
+      const chartData = {
         labels: sortedEntries.map(([category]) => category),
         datasets: [{
           label: `Conteo por ${categoryColumn}`,
@@ -343,6 +353,16 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
           borderColor: 'rgba(37, 99, 235, 1)',
           borderWidth: 2,
         }]
+      };
+      
+      return {
+        chartData,
+        metadata: {
+          type: chartType,
+          columnsUsed,
+          processedData,
+          rawSample
+        }
       };
     }
 
@@ -359,14 +379,7 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
       'Serie 2': Math.floor(Math.random() * 80) + 10
     }));
     
-    setChartInfo({
-      type: chartType,
-      columnsUsed,
-      processedData,
-      rawSample
-    });
-    
-    return {
+    const chartData = {
       labels: categories,
       datasets: [
         {
@@ -385,9 +398,24 @@ export const ChartVisualization: React.FC<ChartVisualizationProps> = ({
         }
       ]
     };
-  };
+    
+    return {
+      chartData,
+      metadata: {
+        type: chartType,
+        columnsUsed,
+        processedData,
+        rawSample
+      }
+    };
+  }, [data, headers, selectedKPI]);
 
-  const chartData = generateChartData();
+  // Update chart info when metadata changes
+  useEffect(() => {
+    if (metadata) {
+      setChartInfo(metadata);
+    }
+  }, [metadata]);
 
   const options: ChartOptions<'bar'> = {
     responsive: true,
