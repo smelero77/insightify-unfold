@@ -12,25 +12,37 @@ import { Brain, Sparkles, AlertCircle, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import heroImage from '@/assets/hero-data-analytics.jpg';
 
+// --- NUEVAS INTERFACES ---
+// Definimos la estructura exacta de la configuración del gráfico que esperamos de la IA.
+interface ChartConfig {
+  chartType: 'bar' | 'pie' | 'line';
+  xAxisColumn: string | string[];
+  yAxisOperation: 'count' | 'sum';
+  yAxisColumn: string | null;
+}
+
+// Actualizamos la interfaz KPI para que incluya la configuración del gráfico.
 interface KPI {
   titulo: string;
   descripcion: string;
+  chartConfig: ChartConfig; // Cada KPI ahora sabe cómo debe ser visualizado.
 }
 
+// La interfaz AIInsight se actualiza automáticamente al usar la nueva interfaz KPI.
 interface AIInsight {
   contexto: string;
   kpis: KPI[];
 }
 
-export const Insightify: React.FC = () => {
+export default function Insightify() {
   const [data, setData] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [insights, setInsights] = useState<AIInsight | null>(null);
   const [selectedKPIIndex, setSelectedKPIIndex] = useState<number | null>(null);
-  const [apiKey, setApiKey] = useState('AIzaSyBK1YAlGtt0PuapytL1R-mwckPc41T4V2k');
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [apiKey, setApiKey] = useState(''); // Dejar vacío por defecto
+  const [showApiKeyInput, setShowApiKeyInput] = useState(true); // Mostrar por defecto
   
   const { toast } = useToast();
 
@@ -66,7 +78,49 @@ export const Insightify: React.FC = () => {
     setIsAnalyzing(true);
     
     try {
-      const prompt = `Eres un analista de negocio experto. Has recibido un fichero con las siguientes columnas: ${headers.join(', ')}. Tu tarea es: 1. Identificar el contexto de negocio (ej: 'Datos de Ventas', 'Inventario de E-commerce', 'Resultados de Campaña de Marketing'). 2. Sugerir 4 KPIs clave que se podrían calcular con estas columnas. Para cada KPI, dame un título corto y una descripción de una línea. Formatea tu respuesta como un objeto JSON así: {"contexto": "tu análisis del contexto", "kpis": [{"titulo": "KPI 1", "descripcion": "Desc 1"}, {"titulo": "KPI 2", "descripcion": "Desc 2"}]}.`;
+      // --- PROMPT MEJORADO ---
+      // Este es el nuevo prompt que le pide a la IA que devuelva la configuración del gráfico.
+      // Es más explícito y le da a nuestro código las instrucciones que necesita.
+      const prompt = `
+        Eres un desarrollador y analista de negocio experto. Has recibido un fichero con las siguientes columnas: ${headers.join(', ')}.
+
+        Tu tarea es doble:
+        1. Identificar el contexto de negocio (ej: 'Datos de Ventas', 'Inventario de E-commerce').
+        2. Sugerir 4 KPIs clave que se podrían calcular con estas columnas.
+
+        Para cada KPI, formatea tu respuesta como un objeto JSON. Además del título y la descripción, DEBES incluir un objeto anidado llamado "chartConfig" que mi código usará para generar el gráfico. Este objeto debe contener:
+        - chartType: El tipo de gráfico recomendado ('bar', 'pie', 'line').
+        - xAxisColumn: La columna a usar para las etiquetas del eje X. Si las categorías son los propios nombres de las columnas, devuelve un array con esos nombres de columna.
+        - yAxisOperation: La operación a realizar ('count' para contar filas, 'sum' para sumar valores de una columna).
+        - yAxisColumn: La columna sobre la que se debe realizar la operación 'sum'. Si la operación es 'count', este campo puede ser null.
+
+        El formato final del JSON debe ser estrictamente así:
+        {
+          "contexto": "Tu análisis del contexto aquí.",
+          "kpis": [
+            {
+              "titulo": "Título del KPI 1",
+              "descripcion": "Descripción del KPI 1.",
+              "chartConfig": {
+                "chartType": "bar",
+                "xAxisColumn": "nombre_columna_eje_x",
+                "yAxisOperation": "count",
+                "yAxisColumn": null
+              }
+            },
+            {
+              "titulo": "Título del KPI 2",
+              "descripcion": "Descripción del KPI 2.",
+              "chartConfig": {
+                "chartType": "pie",
+                "xAxisColumn": ["columna1", "columna2", "columna3"],
+                "yAxisOperation": "sum",
+                "yAxisColumn": null
+              }
+            }
+          ]
+        }
+      `;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
@@ -82,7 +136,9 @@ export const Insightify: React.FC = () => {
               text: prompt
             }]
           }],
+          // Añadimos una configuración para forzar la respuesta en JSON
           generationConfig: {
+            responseMimeType: "application/json", 
             temperature: 0.7,
             topK: 1,
             topP: 1,
@@ -105,13 +161,8 @@ export const Insightify: React.FC = () => {
         throw new Error('No se recibió respuesta de la IA');
       }
 
-      // Extract JSON from the response
-      const jsonMatch = generatedText.match(/\{.*\}/s);
-      if (!jsonMatch) {
-        throw new Error('No se pudo extraer JSON de la respuesta');
-      }
-
-      const analysisResult: AIInsight = JSON.parse(jsonMatch[0]);
+      // La respuesta ya debería ser un JSON limpio gracias a `responseMimeType`.
+      const analysisResult: AIInsight = JSON.parse(generatedText);
       setInsights(analysisResult);
       
       toast({
@@ -149,12 +200,9 @@ export const Insightify: React.FC = () => {
   };
 
   const handleKPISelect = (kpi: KPI, index: number) => {
-    console.log('KPI selected:', kpi, 'Index:', index);
-    console.log('Current data for visualization:', {
-      dataCount: data.length,
-      headers: headers,
-      sampleData: data.slice(0, 2)
-    });
+    // Ahora, cuando seleccionamos un KPI, también tenemos su `chartConfig`.
+    console.log('KPI selected:', kpi); 
+    console.log('Chart config received:', kpi.chartConfig);
     
     setSelectedKPIIndex(index);
     toast({
@@ -173,15 +221,14 @@ export const Insightify: React.FC = () => {
         <div className="space-y-8">
           {/* Header */}
           <div className="relative text-center space-y-6 animate-fade-in overflow-hidden">
-            {/* Background Hero Image */}
-            <div className="absolute inset-0 -z-10">
-              <img 
-                src={heroImage} 
-                alt="Data Analytics Hero" 
-                className="w-full h-full object-cover opacity-20 blur-sm"
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-background/80 to-background"></div>
-            </div>
+             <div className="absolute inset-0 -z-10">
+               <img 
+                 src={heroImage} 
+                 alt="Data Analytics Hero" 
+                 className="w-full h-full object-cover opacity-20 blur-sm"
+               />
+               <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-background/80 to-background"></div>
+             </div>
             
             <div className="relative z-10 pt-12 pb-8">
               <div className="flex items-center justify-center space-x-4 mb-6">
@@ -195,10 +242,6 @@ export const Insightify: React.FC = () => {
                 <br className="hidden md:block" />
                 Sube tu fichero Excel o CSV y deja que la IA haga el análisis por ti.
               </p>
-              
-              {/* Decorative elements */}
-              <div className="absolute top-20 left-10 w-20 h-20 bg-primary/10 rounded-full blur-xl animate-pulse"></div>
-              <div className="absolute bottom-10 right-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl animate-pulse delay-1000"></div>
             </div>
           </div>
 
@@ -231,7 +274,9 @@ export const Insightify: React.FC = () => {
                       className="flex-1"
                     />
                     <Button 
-                      onClick={() => setShowApiKeyInput(false)}
+                      onClick={() => {
+                          if(apiKey.trim()) setShowApiKeyInput(false);
+                      }}
                       disabled={!apiKey.trim()}
                     >
                       Guardar
@@ -273,7 +318,7 @@ export const Insightify: React.FC = () => {
             <ChartVisualization 
               data={data}
               headers={headers}
-              selectedKPI={selectedKPI}
+              selectedKPI={selectedKPI} // El KPI seleccionado ahora contiene el chartConfig
             />
           )}
 

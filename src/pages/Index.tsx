@@ -1,4 +1,4 @@
-import { Insightify } from "@/components/Insightify";
+import Insightify from "@/components/Insightify";
 
 const Index = () => {
   return <Insightify />;

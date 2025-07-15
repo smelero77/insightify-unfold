@@ -4,9 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Brain, BarChart3, TrendingUp } from 'lucide-react';
 
+interface ChartConfig {
+  chartType: 'bar' | 'pie' | 'line';
+  xAxisColumn: string | string[];
+  yAxisOperation: 'count' | 'sum';
+  yAxisColumn: string | null;
+}
+
 interface KPI {
   titulo: string;
   descripcion: string;
+  chartConfig: ChartConfig;
 }
 
 interface AIInsight {

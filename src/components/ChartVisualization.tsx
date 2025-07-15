@@ -24,12 +24,20 @@ ChartJS.register(
   Legend
 );
 
+interface ChartConfig {
+  chartType: 'bar' | 'pie' | 'line';
+  xAxisColumn: string | string[];
+  yAxisOperation: 'count' | 'sum';
+  yAxisColumn: string | null;
+}
+
 interface ChartVisualizationProps {
   data: any[];
   headers: string[];
   selectedKPI: {
     titulo: string;
     descripcion: string;
+    chartConfig: ChartConfig;
   };
 }
 
