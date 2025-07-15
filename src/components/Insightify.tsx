@@ -29,7 +29,7 @@ export const Insightify: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [insights, setInsights] = useState<AIInsight | null>(null);
   const [selectedKPIIndex, setSelectedKPIIndex] = useState<number | null>(null);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState('AIzaSyBK1YAlGtt0PuapytL1R-mwckPc41T4V2k');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   
   const { toast } = useToast();
