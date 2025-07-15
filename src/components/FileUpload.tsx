@@ -5,6 +5,31 @@ import { Card } from '@/components/ui/card';
 import { Upload, FileText, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+// Function to detect if a number is likely an Excel serial date
+const isExcelSerialDate = (value: number): boolean => {
+  // Excel serial dates are typically between 1 (1900-01-01) and 2958465 (9999-12-31)
+  // Common range for modern dates: 25569 (1970-01-01) to 54787 (2050-01-01)
+  return value > 1 && value < 2958465 && value % 1 !== 0; // Has decimal part for time
+};
+
+// Function to convert Excel serial date to JavaScript Date
+const excelSerialDateToDate = (serial: number): Date => {
+  // Excel's epoch starts at 1900-01-01, but JavaScript's Date starts at 1970-01-01
+  // Excel incorrectly treats 1900 as a leap year, so we need to adjust
+  const excelEpoch = new Date(1900, 0, 1);
+  const jsEpoch = new Date(1970, 0, 1);
+  
+  // Convert Excel serial to milliseconds and create date
+  const date = new Date((serial - 25569) * 86400 * 1000);
+  return date;
+};
+
+// Function to detect if a column contains dates based on header name
+const isDateColumn = (header: string): boolean => {
+  const dateKeywords = ['date', 'fecha', 'time', 'tiempo', 'created', 'updated', 'shipped', 'sale'];
+  return dateKeywords.some(keyword => header.toLowerCase().includes(keyword));
+};
+
 interface FileUploadProps {
   onFileProcessed: (data: any[], headers: string[]) => void;
   isLoading: boolean;
@@ -64,7 +89,19 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 if (value === null || value === undefined) {
                   obj[header] = '';
                 } else if (typeof value === 'number') {
-                  obj[header] = value;
+                  // Check if this might be an Excel serial date
+                  if (isDateColumn(header) && isExcelSerialDate(value)) {
+                    try {
+                      const date = excelSerialDateToDate(value);
+                      obj[header] = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                      console.log(`Converted Excel date ${value} to ${obj[header]} for column ${header}`);
+                    } catch (error) {
+                      console.warn(`Failed to convert potential date ${value} in column ${header}:`, error);
+                      obj[header] = value;
+                    }
+                  } else {
+                    obj[header] = value;
+                  }
                 } else {
                   obj[header] = String(value).trim();
                 }
